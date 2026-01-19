@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+
+import cadquery as cq
+import math
+import os
+import sys
+import numpy as np
+from geometry import *
+from airfoil import *
+from avl_parser import *
+
+RAD = math.pi / 180.0
+
+
+# Parse command-line arguments
+if len(sys.argv) < 2:
+    print("Usage: avl2step <input.avl> [output.step]")
+    print("  If output.step is not specified, it will be derived from input filename")
+    sys.exit(1)
+
+AVL_PATH = sys.argv[1]
+
+if len(sys.argv) >= 3:
+    OUT_STEP = sys.argv[2]
+else:
+    # Derive output filename from input: fnm.avl -> fnm.step
+    base_name = os.path.splitext(AVL_PATH)[0]
+    OUT_STEP = base_name + ".step"
+
+print(f"Input AVL file: {AVL_PATH}")
+print(f"Output STEP file: {OUT_STEP}")
+
+
+# --------------------------------------------------
+# Main
+# --------------------------------------------------
+
+model = None
+surfaces = parse_avl(AVL_PATH)
+
+for surf in surfaces[:-1]:
+    print(f"\nBuilding: {surf['name']}")
+
+    wp = cq.Workplane("XZ")
+    last_y = None
+
+    # --------------------------------------------------
+    # Choose reference airfoil ONCE per surface
+    # --------------------------------------------------
+    surface_ref_af = None
+    for sec in surf["sections"]:
+        if sec["airfoil"]:
+            surface_ref_af = load_airfoil(os.path.join(os.path.dirname(AVL_PATH), sec["airfoil"]))
+            break
+    if surface_ref_af is None:
+        surface_ref_af = load_airfoil('NACA0012.dat')
+
+    # --------------------------------------------------
+    # Build sections
+    # --------------------------------------------------
+    surface_solid = None
+    profiles = []  # Store all section profiles
+    
+    for sec in surf["sections"]:
+
+        if sec["airfoil"]:
+            af = load_airfoil(os.path.join(os.path.dirname(AVL_PATH), sec["airfoil"]))
+        else:
+            af = surface_ref_af
+
+        
+        af = resample_to_reference(surface_ref_af, af)
+
+        inc = (surf["angle"] + sec["ainc"]) * RAD
+        chord = sec["c"]
+
+        pts = []
+        for x, z in af:
+            x *= chord
+            z *= chord
+            x, z = rot_about_te((x, z), inc, chord)
+
+            x += sec["x"]*surf["scale"][0]
+            z += sec["z"]*surf["scale"][2]
+
+            x += surf["translate"][0]
+            z += surf["translate"][2]
+
+            pts.append((x, z))
+
+        y = sec["y"] * surf["scale"][1] + surf["translate"][1]
+        
+
+        x_coords = [p[0] for p in pts]
+        actual_chord = max(x_coords) - min(x_coords)
+        
+        profiles.append({'y': y, 'pts': pts, 'chord': chord, 'sec_x': sec["x"]})
+        print(f"  section y={y:.3f}, sec_x={sec['x']:.5f}, chord={chord:.3f}, pts={len(pts)}")
+
+    # Loft section by section (pairwise) using combine=False to preserve section geometry
+    surface_solid = None
+    for i in range(len(profiles) - 1):
+        prof1 = profiles[i]
+        prof2 = profiles[i + 1]
+        
+        dy = prof2['y'] - prof1['y']
+        
+        wp = cq.Workplane("XZ")
+        wp = wp.workplane(offset=prof1['y']).polyline(prof1['pts']).close()
+        wp = wp.workplane(offset=dy).polyline(prof2['pts']).close()
+        
+        segment = wp.loft(combine=True) 
+        
+        if surface_solid is None:
+            surface_solid = segment
+        else:
+            surface_solid = surface_solid.union(segment)
+        
+        print(f"  lofted segment {i}: y={prof1['y']:.3f} to y={prof2['y']:.3f}")
+
+    solid = surface_solid
+
+    if surf["ydup"] is not None:
+        y0 = surf["ydup"]
+        solid = solid.union(
+            solid.translate((0, -y0, 0))
+                 .mirror("XZ")
+                 .translate((0, y0, 0))
+        )
+
+    if model is None:
+        model = solid
+    else:
+        model = model.union(solid)
+
+cq.exporters.export(model, OUT_STEP)
+print(f"\nWrote {OUT_STEP}")

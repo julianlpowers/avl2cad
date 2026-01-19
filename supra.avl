@@ -28,7 +28,7 @@ INDEX
 1
  
 ANGLE
-     10.0     twist angle bias for whole surface
+     1.0     twist angle bias for whole surface
  
 YDUPLICATE
 0.0
