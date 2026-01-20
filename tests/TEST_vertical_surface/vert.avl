@@ -1,0 +1,49 @@
+Supra 3.4m F3J
+0.0                      Mach
+0     0     0.0          iYsym  iZsym  Zsym
+#
+1034.0 7.60  133.86     Sref   Cref   Bref    reference area, chord, span
+3.750  0.0   1.5        Xref   Yref   Zref    moment reference location
+0.015                   CDo
+#
+
+
+#==============================================================
+SURFACE
+Fin
+10  1.0  12 -1.0   ! Nchord  Cspace   Nspan  Sspace
+ 
+ANGLE
+     0.0     twist angle bias for whole surface
+ 
+SCALE
+1.15 1.15 1.1
+!1.61 1.61 1.54
+ 
+TRANSLATE
+42.5 0.0  0.0
+ 
+#---------------------------------------------
+SECTION
+ 0.0      0.0        0.           7.0     0.000000
+CONTROL
+rudder   1.0  0.43    0. 0. 0.    1.
+
+#---------------------
+SECTION
+ 1.125    0.0         9.0         4.0     0.000000
+CONTROL
+rudder   1.0  0.50    0. 0. 0.    1.
+
+#---------------------
+SECTION
+ 1.875    0.0        11.25        2.8333  0.000000
+CONTROL
+rudder   1.0  0.50    0. 0. 0.    1.
+
+#---------------------
+SECTION
+ 2.5      0.0        12.0         2.0     0.000000
+CONTROL
+rudder   1.0  0.50    0. 0. 0.    1.
+
