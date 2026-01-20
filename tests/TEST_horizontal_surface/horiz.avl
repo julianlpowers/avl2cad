@@ -1,0 +1,49 @@
+Test Wing
+0.0                      Mach
+0     0     0.0          iYsym  iZsym  Zsym
+#
+50.0 2.5  10.0           Sref   Cref   Bref    reference area, chord, span
+1.0  0.0   0.0           Xref   Yref   Zref    moment reference location
+0.015                    CDo
+#
+
+
+#==============================================================
+SURFACE
+Wing
+10  1.0  12 -1.0   ! Nchord  Cspace   Nspan  Sspace
+ 
+ANGLE
+     0.0     twist angle bias for whole surface
+ 
+SCALE
+1.15 1.15 1.1
+ 
+TRANSLATE
+5.0 0.0  2.0
+ 
+#---------------------------------------------
+SECTION
+ 0.0      0.0        0.0         7.0     0.000000
+CONTROL
+aileron   1.0  0.43    0. 0. 0.    1.
+
+#---------------------
+SECTION
+ 1.125    3.0         0.0         4.0     0.000000
+CONTROL
+aileron   1.0  0.50    0. 0. 0.    1.
+
+#---------------------
+SECTION
+ 1.875    4.5         0.0        2.8333  0.000000
+CONTROL
+aileron   1.0  0.50    0. 0. 0.    1.
+
+#---------------------
+SECTION
+ 2.5      5.0         0.0         2.0     0.000000
+CONTROL
+aileron   1.0  0.50    0. 0. 0.    1.
+
+
