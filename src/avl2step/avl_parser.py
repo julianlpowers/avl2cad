@@ -2,6 +2,21 @@
 # AVL parsing helpers
 # --------------------------------------------------
 
+def skip_comments(lines, i):
+    """Skip comment lines starting with # or !.
+    
+    Args:
+        lines: List of all lines
+        i: Current line index
+        
+    Returns:
+        Index of next non-comment line
+    """
+    while i < len(lines) and (lines[i].startswith('#') or lines[i].startswith('!')):
+        i += 1
+    return i
+
+
 def read_values(line, lines, i, n):
     """Read numeric values from AVL file lines.
     
@@ -18,7 +33,9 @@ def read_values(line, lines, i, n):
     if len(parts) >= n + 1:
         return list(map(float, parts[1:1+n])), i
     else:
-        return list(map(float, lines[i+1].split()[:n])), i + 1
+        # Skip comment lines when reading next line
+        next_i = skip_comments(lines, i + 1)
+        return list(map(float, lines[next_i].split()[:n])), next_i
 
 
 def parse_avl(filename):
@@ -39,10 +56,17 @@ def parse_avl(filename):
     i = 0
     while i < len(lines):
         line = lines[i]
+        
+        # Skip comment lines (start with # or !)
+        if line.startswith('#') or line.startswith('!'):
+            i += 1
+            continue
 
         if line == "SURFACE":
+            # Skip comments to find surface name
+            name_i = skip_comments(lines, i + 1)
             current = {
-                "name": lines[i+1],
+                "name": lines[name_i],
                 "angle": 0.0,
                 "scale": (1.0, 1.0, 1.0),
                 "translate": (0.0, 0.0, 0.0),
@@ -50,7 +74,7 @@ def parse_avl(filename):
                 "sections": []
             }
             surfaces.append(current)
-            i += 2
+            i = name_i + 1
             continue
 
         if current is not None:
@@ -72,7 +96,9 @@ def parse_avl(filename):
                 current["ydup"] = v[0]
 
             elif line == "SECTION":
-                vals = lines[i+1].split()
+                # Skip comments to find section data
+                data_i = skip_comments(lines, i + 1)
+                vals = lines[data_i].split()
                 current["sections"].append({
                     "x": float(vals[0]),
                     "y": float(vals[1]),
@@ -81,11 +107,13 @@ def parse_avl(filename):
                     "ainc": float(vals[4]) if len(vals) > 4 else 0.0,
                     "airfoil": None
                 })
-                i += 1
+                i = data_i
 
             elif line.startswith("AFIL"):
-                current["sections"][-1]["airfoil"] = lines[i+1].strip()
-                i += 1
+                # Skip comments to find airfoil filename
+                afil_i = skip_comments(lines, i + 1)
+                current["sections"][-1]["airfoil"] = lines[afil_i].strip()
+                i = afil_i
 
         i += 1
 
