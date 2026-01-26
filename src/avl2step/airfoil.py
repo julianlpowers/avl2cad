@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.interpolate import splprep, splev
 
 # --------------------------------------------------
 # Airfoil utilities
@@ -42,14 +43,27 @@ def resample_to_reference(ref, pts):
     return list(zip(x, z))
 
 
-def flat_plate(n=120):
-    """Generate a flat plate airfoil.
-    
-    Args:
-        n: Total number of points
-        
-    Returns:
-        List of (x, z) coordinates forming a flat plate
+
+def densify_airfoil_points(pts, n_points=200, per=False):
     """
-    x = np.linspace(1, 0, n // 2)
-    return list(zip(x, np.zeros_like(x))) + list(zip(x[::-1], np.zeros_like(x)))
+    Densify airfoil points using cubic spline interpolation.
+    Args:
+        pts: List of (x, y) tuples.
+        n_points: Number of output points.
+        per: If True, treat as periodic (closed curve).
+    Returns:
+        List of (x, y) tuples with increased density.
+    """
+    pts = np.array(pts)
+    tck, u = splprep([pts[:,0], pts[:,1]], s=0, per=per)
+    # Use a cosine spacing to cluster points near u=0.5
+    theta = np.linspace(0, np.pi, n_points)
+    u_new = 0.5 * (1 - np.cos(theta))
+    x_new, y_new = splev(u_new, tck)
+    return list(zip(x_new, y_new))
+
+
+
+
+
+

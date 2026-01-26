@@ -2,7 +2,7 @@
 
 __version__ = "0.1.0"
 
-from .airfoil import load_airfoil, resample_to_reference, flat_plate
+from .airfoil import load_airfoil, resample_to_reference
 from .geometry import rot_xz, rot_about_te
 from .avl_parser import parse_avl
 from .converter import convert_avl_to_step

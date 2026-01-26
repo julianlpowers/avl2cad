@@ -17,10 +17,10 @@ ANGLE
      0.0     twist angle bias for whole surface
  
 SCALE
-1.15 1.15 1.1
+1.0 1.0 1.0
  
 TRANSLATE
-5.0 0.0  2.0
+0.0 0.0  0.0
  
 #---------------------------------------------
 SECTION

@@ -3,11 +3,12 @@
 import cadquery as cq
 import math
 import os
-from .airfoil import load_airfoil, resample_to_reference
+from .airfoil import load_airfoil, resample_to_reference, densify_airfoil_points
 from .geometry import rot_about_te
 from .avl_parser import parse_avl
 
 RAD = math.pi / 180.0
+
 
 
 def convert_avl_to_step(avl_path, step_path, exclude_last_surface=False, verbose=True):
@@ -79,7 +80,8 @@ def convert_avl_to_step(avl_path, step_path, exclude_last_surface=False, verbose
             else:
                 af = surface_ref_af
             
-            af = resample_to_reference(surface_ref_af, af)
+            # af = resample_to_reference(surface_ref_af, af)
+            af = densify_airfoil_points(af,1000)
             
             inc = (surf["angle"] + sec["ainc"]) * RAD
             chord = sec["c"]
@@ -130,46 +132,32 @@ def convert_avl_to_step(avl_path, step_path, exclude_last_surface=False, verbose
                 if verbose:
                     print(f"  section y={y:.3f}, sec_x={sec['x']:.5f}, chord={scaled_chord:.3f}, pts={len(pts)}")
         
-        # Loft section by section (pairwise)
-        surface_solid = None
-        for i in range(len(profiles) - 1):
-            prof1 = profiles[i]
-            prof2 = profiles[i + 1]
-            
-            d_span = prof2['span_coord'] - prof1['span_coord']
-            
-            if is_vertical:
-                # Vertical surface: loft in XY plane along Z axis
-                wp = cq.Workplane("XY")
-                wp = wp.workplane(offset=prof1['span_coord']).polyline(prof1['pts']).close()
-                wp = wp.workplane(offset=d_span).polyline(prof2['pts']).close()
+
+        # Loft using robust workplane-offset paradigm
+        if is_vertical:
+            # All points in XY plane, offset along Z
+            wp = cq.Workplane("XY")
+        else:
+            wp = cq.Workplane("XZ")
+
+        for idx, prof in enumerate(profiles):
+            pts2d = [(x, y, 0) for x, y in prof['pts']]
+            if idx == 0:
+                offset = prof['span_coord']
             else:
-                # Horizontal surface: loft in XZ plane along Y axis
-                wp = cq.Workplane("XZ")
-                wp = wp.workplane(offset=prof1['span_coord']).polyline(prof1['pts']).close()
-                wp = wp.workplane(offset=d_span).polyline(prof2['pts']).close()
-            
-            segment = wp.loft(combine=True)
-            
-            if surface_solid is None:
-                surface_solid = segment
-            else:
-                surface_solid = surface_solid.union(segment)
-            
-            if verbose:
-                coord_name = 'z' if is_vertical else 'y'
-                print(f"  lofted segment {i}: {coord_name}={prof1['span_coord']:.3f} to {prof2['span_coord']:.3f}")
+                offset = prof['span_coord'] - profiles[idx-1]['span_coord']
+            wp = wp.workplane(offset=offset).splineApprox(pts2d,smoothing=(1,1,1)).close().wire()
+        solid = wp.loft(combine=True, ruled=False)
         
-        solid = surface_solid
         
-        # Handle Y-duplication (symmetry)
-        if surf["ydup"] is not None:
-            y0 = surf["ydup"]
-            solid = solid.union(
-                solid.translate((0, -y0, 0))
-                     .mirror("XZ")
-                     .translate((0, y0, 0))
-            )
+        # # Handle Y-duplication (symmetry)
+        # if surf["ydup"] is not None:
+        #     y0 = surf["ydup"]
+        #     solid = solid.union(
+        #         solid.translate((0, -y0, 0))
+        #              .mirror("XZ")
+        #              .translate((0, y0, 0))
+        #     )
         
         # Combine with model
         if model is None:
