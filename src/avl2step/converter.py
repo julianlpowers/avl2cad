@@ -61,15 +61,10 @@ def convert_avl_to_step(avl_path, step_path, exclude_last_surface=False, verbose
                 surface_ref_af = load_airfoil(os.path.join(os.path.dirname(avl_path), sec["airfoil"]))
                 break
         if surface_ref_af is None:
-            # Try to load a default airfoil
-            # default_path = os.path.join(os.path.dirname(avl_path), 'NACA0012.dat')
+            # load the default airfoil
             default_path = os.path.join(os.path.dirname(__file__), 'NACA0012.dat')
-            if os.path.exists(default_path):
-                surface_ref_af = load_airfoil(default_path)
-            else:
-                # Fall back to flat plate
-                from .airfoil import flat_plate
-                surface_ref_af = flat_plate()
+            surface_ref_af = load_airfoil(default_path)
+    
         
         # Build sections
         profiles = []
@@ -81,83 +76,60 @@ def convert_avl_to_step(avl_path, step_path, exclude_last_surface=False, verbose
                 af = surface_ref_af
             
             # af = resample_to_reference(surface_ref_af, af)
-            af = densify_airfoil_points(af,1000)
+            # af = densify_airfoil_points(af,1000)
             
             inc = (surf["angle"] + sec["ainc"]) * RAD
-            chord = sec["c"]
+            chord = sec["c"] * surf["scale"][0]
             
             pts = []
-            if is_vertical:
-                # Vertical surface: airfoil in XY plane, loft along Z
-                # For vertical surfaces, chord is scaled by scale[0] (X direction)
-                scaled_chord = chord * surf["scale"][0]
-                for x, y_local in af:
-                    x_new = x * scaled_chord
-                    y_new = y_local * scaled_chord
-                    x_new, y_new = rot_about_te((x_new, y_new), inc, scaled_chord)
-                    
-                    x_new += sec["x"] * surf["scale"][0]
-                    y_new += sec["y"] * surf["scale"][1]
-                    
-                    x_new += surf["translate"][0]
-                    y_new += surf["translate"][1]
-                    
-                    pts.append((x_new, y_new))
-                
-                z = sec["z"] * surf["scale"][2] + surf["translate"][2]
-                profiles.append({'span_coord': z, 'pts': pts, 'chord': scaled_chord, 'sec_x': sec["x"]})
-                
-                if verbose:
-                    print(f"  section z={z:.3f}, sec_x={sec['x']:.5f}, chord={scaled_chord:.3f}, pts={len(pts)}")
-            else:
-                # Horizontal surface: airfoil in XZ plane, loft along Y
-                # For horizontal surfaces, chord is scaled by scale[0] (X direction)
-                scaled_chord = chord * surf["scale"][0]
-                for x, z_local in af:
-                    x_new = x * scaled_chord
-                    z_new = z_local * scaled_chord
-                    x_new, z_new = rot_about_te((x_new, z_new), inc, scaled_chord)
-                    
-                    x_new += sec["x"] * surf["scale"][0]
-                    z_new += sec["z"] * surf["scale"][2]
-                    
-                    x_new += surf["translate"][0]
-                    z_new += surf["translate"][2]
-                    
-                    pts.append((x_new, z_new))
-                
-                y = sec["y"] * surf["scale"][1] + surf["translate"][1]
-                profiles.append({'span_coord': y, 'pts': pts, 'chord': scaled_chord, 'sec_x': sec["x"]})
-                
-                if verbose:
-                    print(f"  section y={y:.3f}, sec_x={sec['x']:.5f}, chord={scaled_chord:.3f}, pts={len(pts)}")
-        
 
-        # Loft using robust workplane-offset paradigm
-        if is_vertical:
-            # All points in XY plane, offset along Z
-            wp = cq.Workplane("XY")
-        else:
-            wp = cq.Workplane("XZ")
+            nidx = 1 if is_vertical else 2 # surface normal dir index
+            sidx = 2 if is_vertical else 1 # spanwise dir index
+
+            for x, n in af:
+                x_new = x * chord
+                n_new = n * chord
+                x_new, n_new = rot_about_te((x_new, n_new), inc, chord)
+                
+                x_new += sec["x"] * surf["scale"][0]
+                n_new += (sec["y"] if is_vertical else sec["z"]) * surf["scale"][nidx]
+                
+                x_new += surf["translate"][0]
+                n_new += surf["translate"][nidx]
+                
+                pts.append((x_new, n_new))
+            
+            s = (sec["z"] if is_vertical else sec["y"]) * surf["scale"][sidx] + surf["translate"][sidx]
+            profiles.append({'span_coord': s, 'pts': pts, 'chord': chord, 'sec_x': sec["x"]})   
+
+            if verbose:
+                if is_vertical: 
+                    print(f"  section z={s:.3f}, sec_x={sec['x']:.5f}, chord={chord:.3f}, pts={len(pts)}")
+                else:
+                    print(f"  section y={s:.3f}, sec_x={sec['x']:.5f}, chord={chord:.3f}, pts={len(pts)}")
+
+
+        # Loft the sections together
+        wp = cq.Workplane("XY") if is_vertical else cq.Workplane("XZ")
 
         for idx, prof in enumerate(profiles):
-            pts2d = [(x, y, 0) for x, y in prof['pts']]
+            pts2d = [(x, n, 0) for x, n in prof['pts']]
             if idx == 0:
                 offset = prof['span_coord']
             else:
                 offset = prof['span_coord'] - profiles[idx-1]['span_coord']
-            wp = wp.workplane(offset=offset).splineApprox(pts2d,smoothing=(1,1,1)).close().wire()
+            wp = wp.workplane(offset=offset).splineApprox(pts2d,minDeg=3).close().wire()
         solid = wp.loft(combine=True, ruled=False)
         
         
-        # # Handle Y-duplication (symmetry)
-        # if surf["ydup"] is not None:
-        #     y0 = surf["ydup"]
-        #     solid = solid.union(
-        #         solid.translate((0, -y0, 0))
-        #              .mirror("XZ")
-        #              .translate((0, y0, 0))
-        #     )
+        # Handle Y-duplication (symmetry)
+        if surf["ydup"] is not None:
+            y0 = surf["ydup"]
+            solid = solid.union(
+                solid.translate((0, -y0, 0))
+                     .mirror("XZ")
+                     .translate((0, y0, 0))
+            )
         
         # Combine with model
         if model is None:
